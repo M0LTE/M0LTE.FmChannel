@@ -113,6 +113,35 @@ public sealed record FmLinkProfile(
 /// </remarks>
 public sealed class FmChannel
 {
+    /// <summary>
+    /// How wide a filter's transition is, as a fraction of the passband it is describing.
+    /// </summary>
+    /// <remarks>
+    /// Filters here are specified by their shape in HERTZ and the tap count is derived, which is
+    /// the opposite of how this started. A fixed tap count seems harmless and is not: a
+    /// windowed-sinc's transition width is roughly rate/taps, so a fixed count makes every filter
+    /// twice as sloppy each time the sample rate doubles. A radio does not behave that way - its
+    /// audio filters are analogue, and they do not widen because a sound card samples faster. The
+    /// practical consequence was that the same waveform measured at two sample rates saw two
+    /// different channels and the higher rate was penalised, so no measurement at one rate could
+    /// be compared with one at another.
+    /// </remarks>
+    private const double SkirtFraction = 0.15;
+
+    /// <summary>
+    /// An odd tap count giving roughly <paramref name="transitionHz"/> of transition at
+    /// <paramref name="rate"/>. Odd so the filter is symmetric about a whole sample and its group
+    /// delay is an integer, which keeps a timing reference meaningful.
+    /// </summary>
+    private static int TapsFor(int rate, double transitionHz)
+    {
+        // The usual windowed-sinc rule of thumb: transition is about four times the rate over the
+        // tap count. Clamped at both ends - too few taps stops being a filter, and too many costs
+        // time for a sharpness no radio has.
+        int taps = (int)Math.Ceiling(4.0 * rate / Math.Max(transitionHz, 1));
+        return Math.Clamp(taps | 1, 31, 2047);
+    }
+
     private readonly FmLinkProfile _profile;
     private readonly int _audioRate;
     private readonly int _ifRate;
@@ -290,7 +319,7 @@ public sealed class FmChannel
     // just a low-pass on each of I and Q at half the bandwidth.
     private void FilterIf(double[] i, double[] q)
     {
-        int taps = 129;
+        int taps = TapsFor(_ifRate, _profile.IfBandwidthHz * SkirtFraction);
         float[] kernel = FilterDesign.LowPass(_profile.IfBandwidthHz / 2, _ifRate, taps);
         FilterInPlace(i, kernel);
         FilterInPlace(q, kernel);
@@ -332,7 +361,7 @@ public sealed class FmChannel
     {
         double nyquist = rate / 2.0;
         double high = Math.Min(highHz, nyquist * 0.95);
-        int taps = 127;
+        int taps = TapsFor(rate, Math.Max(high - Math.Max(lowHz, 0), 1) * SkirtFraction);
         float[] kernel = lowHz > 20
             ? FilterDesign.BandPass(lowHz, high, rate, taps)
             : FilterDesign.LowPass(high, rate, taps);
@@ -401,7 +430,9 @@ public sealed class FmChannel
             stuffed[n * factor] = input[n] * factor;
         }
 
-        float[] kernel = FilterDesign.LowPass(outputRate / (2.0 * factor) * 0.9, outputRate, 127);
+        double cutoff = outputRate / (2.0 * factor) * 0.9;
+        float[] kernel = FilterDesign.LowPass(
+            cutoff, outputRate, TapsFor(outputRate, cutoff * SkirtFraction));
         var filter = new FirFilter(kernel);
         for (int n = 0; n < stuffed.Length; n++)
         {
@@ -413,7 +444,9 @@ public sealed class FmChannel
 
     private static float[] Decimate(float[] input, int factor, int inputRate)
     {
-        float[] kernel = FilterDesign.LowPass(inputRate / (2.0 * factor) * 0.9, inputRate, 127);
+        double cutoff = inputRate / (2.0 * factor) * 0.9;
+        float[] kernel = FilterDesign.LowPass(
+            cutoff, inputRate, TapsFor(inputRate, cutoff * SkirtFraction));
         var filter = new FirFilter(kernel);
         var filtered = new float[input.Length];
         for (int n = 0; n < input.Length; n++)
