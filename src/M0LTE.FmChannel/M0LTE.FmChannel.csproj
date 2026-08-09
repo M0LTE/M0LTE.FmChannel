@@ -3,7 +3,7 @@
   <PropertyGroup>
     <PackageId>M0LTE.FmChannel</PackageId>
     <AssemblyName>M0LTE.FmChannel</AssemblyName>
-    <RootNamespace>M0LTE.FmChannel</RootNamespace>
+    <RootNamespace>M0LTE.Fm</RootNamespace>
     <Description>A physical FM link simulator for measuring soundcard modems: audio is really frequency-modulated onto a carrier, noise is added there at a stated carrier-to-noise ratio, and a limiter and discriminator bring it back through the radio's real audio paths. The threshold effect, triangular discriminator noise, pre/de-emphasis and band limits all emerge rather than being asserted.</Description>
     <PackageTags>fm;radio;channel-model;simulation;dsp;amateur-radio;packet-radio;modem</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

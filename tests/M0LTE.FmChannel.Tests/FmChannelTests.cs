@@ -1,6 +1,6 @@
-using M0LTE.FmChannel;
+using M0LTE.Fm;
 
-namespace M0LTE.FmChannel.Tests;
+namespace M0LTE.Fm.Tests;
 
 /// <summary>
 /// The FM link model, checked against the behaviour that makes FM different from a linear channel.

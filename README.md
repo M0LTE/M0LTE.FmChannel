@@ -10,11 +10,17 @@ threshold effect, the discriminator's triangular noise, pre/de-emphasis and the 
 emerge from that, rather than being asserted.
 
 ```csharp
+using M0LTE.Fm;
+
 var link = FmLinkProfile.MicAndSpeaker(peakDeviationHz: 3000);
 var channel = new FmChannel(link, audioRate: 48000, seed: 1);
 
 float[] heard = channel.Apply(transmitted, cnrDb: 20);
 ```
+
+The namespace is `M0LTE.Fm`, not `M0LTE.FmChannel`: a type called `FmChannel` inside a namespace of
+the same name makes `new FmChannel(...)` ambiguous, and the compiler resolves it to the namespace.
+Package id and namespace are allowed to differ, and here they have to.
 
 ## Why it exists
 

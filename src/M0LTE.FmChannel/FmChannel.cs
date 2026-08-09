@@ -7,7 +7,7 @@
 
 using M0LTE.Dsp;
 
-namespace M0LTE.FmChannel;
+namespace M0LTE.Fm;
 
 /// <summary>
 /// One end-to-end FM link: how the audio a modem transmits comes back out of a receiver's
