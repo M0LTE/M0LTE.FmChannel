@@ -58,16 +58,16 @@ results from this should say which it is quoting.
 Everything is settable on the record directly - deviation, IF bandwidth, the audio passband at each
 end, the emphasis time constants, a deviation calibration error, and flat-Rayleigh flutter.
 
-`FmLinkProfile.IfBandwidthForSpacing()` gives the IF bandwidth for a channel spacing, and the
-figures are a real radio's rather than a rule of thumb: 12.6 kHz wide, 12.0 kHz medium, 7.8 kHz
-narrow, from the Tait TM8100/TM8200 service manual MMA-00005-05 p.73 Table 3.1. Which spacing a mode
-belongs on is a property of the mode, not a preference.
+`FmLinkProfile.IfBandwidthForSpacing()` gives a generic IF bandwidth for a channel spacing, 16 kHz
+at 20 kHz spacing and above and 8 kHz below. Which spacing a mode belongs on is a property of the
+mode, not a preference.
 
-Up to 0.3.0 this returned 16 kHz for anything at or above 20 kHz spacing and 8 kHz below, which is
-27 % too wide on a 25 kHz channel and 33 % too wide on a 20 kHz one. Since the carrier-to-noise
-ratio is stated in this bandwidth, that moved every wide-channel measurement by about 1.1 dB, in
-the direction that flatters the modem. **Wide and medium channel numbers measured before 0.4.0 are
-not comparable with numbers measured after it.**
+**Real radios vary by more than enough to matter.** A Tait TM8100 measures its own IF at 12.6 kHz
+wide, 12.0 kHz medium and 7.8 kHz narrow (service manual MMA-00005-05 p.73, Table 3.1), which on a
+25 kHz channel is 3.4 kHz narrower than the generic figure. That is not a rounding difference: a
+mode occupying about 20 kHz, such as C4FSK 19200, decodes 25 of 25 bursts through 16 kHz and **none
+at all** through 12.6 kHz. If the answer matters to you, pass the figure for the radio you mean
+rather than the one for its channel spacing.
 
 ## Filters are specified in hertz
 
