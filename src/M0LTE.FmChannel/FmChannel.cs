@@ -18,7 +18,17 @@ namespace M0LTE.Fm;
 /// <param name="PeakDeviationHz">The deviation the transmit drive is calibrated to, in Hz peak
 /// (docs/mode-modulation-reference.md: 3.0 kHz for AFSK 1200, 2.4 kHz for GFSK 9600, 5.0 kHz for
 /// C4FSK 19200 and qpsk3600, and so on). The modem's audio peak maps to this.</param>
-/// <param name="IfBandwidthHz">Receiver IF filter bandwidth, and the bandwidth the carrier-to-noise
+/// <param name="IfBandwidthHz">Total IF width at the <b>-6 dB</b> points, not -3 dB. The filter is
+/// built as a windowed sinc with this as its full width, and a windowed sinc is half amplitude at
+/// its design cutoff: measured, setting this to 12600 gives 12.6 kHz between the -6 dB points and
+/// 12.1 kHz between the -3 dB points.
+/// <para><b>Radio datasheets are not consistent about which they quote, and mixing them is a real
+/// trap.</b> A Tait TM8100's Table 3.1 gives "total IF 3 dB bandwidths" of 12.6 kHz wide and
+/// 7.8 kHz narrow; feeding those numbers in here makes the filter NARROWER than that radio, because
+/// a real crystal-plus-FPGA cascade has far gentler skirts than this one and its -6 dB width is
+/// well above its -3 dB width. Doing exactly that took a 25 kHz mode from 25 frames of 25 to none
+/// at all, which looked like a finding about the radio and was arithmetic about definitions.</para>
+/// Receiver IF filter bandwidth, and the bandwidth the carrier-to-noise
 /// ratio is stated in. Roughly 8 kHz on a 12.5 kHz channel, 16 kHz on 25 kHz.</param>
 /// <param name="TxAudioLowHz">Transmit audio path low cut. A microphone input rolls off below
 /// ~300 Hz; a data port passes down to a few Hz.</param>
@@ -77,18 +87,14 @@ public sealed record FmLinkProfile(
     /// <para>Generic figures for a channel spacing, not any particular radio's. A 25 kHz channel is
     /// commonly given about 15 to 16 kHz of IF and a 12.5 kHz channel about 7.5 to 8 kHz, and these
     /// are the numbers every mask in the consuming repositories was measured against.</para>
-    /// <para><b>Real radios vary by more than enough to matter, so a mode that depends on the
-    /// answer should say which radio it means.</b> A Tait TM8100 measures its own at 12.6 kHz wide,
-    /// 12.0 kHz medium and 7.8 kHz narrow, for all bands except K5 which is 12.0, 9.0 and 7.6
-    /// (service manual MMA-00005-05 issue 5, p.73, Table 3.1). That is 3.4 kHz narrower than the
-    /// generic figure on a 25 kHz channel.</para>
-    /// <para><b>Do not conclude from that that a fast mode cannot fit.</b> It was briefly claimed
-    /// here that a 20 kHz mode could not pass 12.6 kHz, on the strength of this library measuring
-    /// C4FSK 19200 at zero frames through it. Tait's own product says otherwise: their high speed
-    /// data runs at "12 kbit/s ... narrow band and wide band, and can be set to 19200 bit/s for
-    /// THSD wide band" (MMA-00038-06 p.9), so 19200 over the air fits 12.6 kHz and 12 kbit/s fits
-    /// 7.8 kHz, in Tait's own radio. A simulated mode that dies there is evidence about the
-    /// simulation, not about the radio.</para>
+    /// <para><b>Mind which point a radio's figure is quoted at.</b> A Tait TM8100's service manual
+    /// gives "total IF 3 dB bandwidths" of 12.6 kHz wide, 12.0 medium and 7.8 narrow
+    /// (MMA-00005-05 p.73, Table 3.1). Those are -3 dB figures and this parameter is a -6 dB one,
+    /// so they are NOT interchangeable with the numbers here, and a Tait's wide channel is an
+    /// ordinary 25 kHz channel rather than a tight one. Putting 12.6 kHz in here modelled a filter
+    /// narrower than the radio it was meant to represent, and took a 25 kHz mode from 25 frames of
+    /// 25 to none - which read as a finding about the radio and was arithmetic about
+    /// definitions.</para>
     /// <para>0.4.0 briefly made this function return Tait's figures, which was wrong: one
     /// manufacturer's measurements do not belong in a generic helper. They belong to a radio model,
     /// and until there is one, pass the figure you mean.</para>

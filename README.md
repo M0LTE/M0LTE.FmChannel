@@ -62,19 +62,17 @@ end, the emphasis time constants, a deviation calibration error, and flat-Raylei
 at 20 kHz spacing and above and 8 kHz below. Which spacing a mode belongs on is a property of the
 mode, not a preference.
 
-**Real radios vary by more than enough to matter.** A Tait TM8100 measures its own IF at 12.6 kHz
-wide, 12.0 kHz medium and 7.8 kHz narrow (service manual MMA-00005-05 p.73, Table 3.1), which on a
-25 kHz channel is 3.4 kHz narrower than the generic figure. If the answer matters to you, pass the
-figure for the radio you mean rather than the one for its channel spacing.
+**`IfBandwidthHz` is a -6 dB total width, and radio datasheets are not consistent about which point
+they quote.** A windowed sinc is half amplitude at its design cutoff, so setting this to 12600 gives
+12.6 kHz between the -6 dB points and 12.1 kHz between the -3 dB points. A Tait TM8100's service
+manual quotes "total IF 3 dB bandwidths" of 12.6 kHz wide and 7.8 kHz narrow; those are not the same
+quantity, and a real crystal-plus-FPGA cascade has far gentler skirts than this filter, so its -6 dB
+width sits well above its -3 dB width.
 
-**A caution, learnt the hard way.** It is tempting to compare a mode's occupied bandwidth against an
-IF bandwidth and conclude the mode cannot fit. That reasoning was used here, from this library
-measuring C4FSK 19200 at zero frames through 12.6 kHz, and it was wrong. Tait's own high speed data
-runs at "12 kbit/s ... narrow band and wide band, and can be set to 19200 bit/s for THSD wide band"
-(MMA-00038-06 p.9): 19200 over the air through 12.6 kHz, and 12 kbit/s through 7.8 kHz, in that same
-radio. **A simulated mode that dies in a narrower IF is evidence about the simulation.** Occupied
-bandwidth at 99% of power is not the bandwidth a mode needs, and this model's IF filter has sharper
-skirts than a crystal-plus-FPGA cascade.
+Mixing the two is a real trap and it has already been sprung once here: substituting the -3 dB
+figures modelled a filter narrower than the radio they came from, and took a 25 kHz mode from 25
+frames of 25 to none at all. That read as a finding about the radio and was arithmetic about
+definitions. A Tait's wide channel is an ordinary 25 kHz channel, not a tight one.
 
 ## Filters are specified in hertz
 

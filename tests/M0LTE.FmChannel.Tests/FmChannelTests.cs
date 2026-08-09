@@ -1,3 +1,4 @@
+using M0LTE.Dsp;
 using M0LTE.Fm;
 
 namespace M0LTE.Fm.Tests;
@@ -343,5 +344,62 @@ public class FmChannelTests
         }
 
         (flutter / Seeds).Should().BeLessThan(steady / Seeds);
+    }
+
+    [Fact]
+    public void An_If_Bandwidth_Names_The_Six_Decibel_Width_Not_The_Three_Decibel_One()
+    {
+        // Which point a bandwidth is quoted at is not a detail, and this test exists because
+        // getting it wrong cost a wrong conclusion about a real radio. A Tait TM8100's service
+        // manual quotes "total IF 3 dB bandwidths"; IfBandwidthHz here is a -6 dB width. Feeding
+        // the former into the latter models a filter NARROWER than the radio it came from, and
+        // doing exactly that took a 25 kHz mode from 25 frames of 25 to none at all. That read as
+        // a finding about the radio and was arithmetic about definitions.
+        const double rate = 96000;
+        const double bandwidth = 12600;
+        float[] kernel = FilterDesign.LowPass(bandwidth / 2, rate, 161);
+        int middle = (kernel.Length - 1) / 2;
+
+        double Response(double hz)
+        {
+            double re = 0;
+            double im = 0;
+            for (int n = 0; n < kernel.Length; n++)
+            {
+                double angle = -2 * Math.PI * hz / rate * (n - middle);
+                re += kernel[n] * Math.Cos(angle);
+                im += kernel[n] * Math.Sin(angle);
+            }
+
+            return Math.Sqrt((re * re) + (im * im));
+        }
+
+        double peak = Response(0);
+
+        double Edge(double db)
+        {
+            double target = peak * Math.Pow(10, db / 20.0);
+            for (double hz = 0; hz < rate / 2; hz += 5)
+            {
+                if (Response(hz) < target)
+                {
+                    return hz;
+                }
+            }
+
+            return rate / 2;
+        }
+
+        double sixDbWidth = 2 * Edge(-6);
+        double threeDbWidth = 2 * Edge(-3);
+
+        sixDbWidth.Should().BeApproximately(
+            bandwidth, bandwidth * 0.02,
+            "the setting names the -6 dB width, because a windowed sinc is half amplitude at its "
+            + "design cutoff");
+        threeDbWidth.Should().BeLessThan(
+            sixDbWidth,
+            "the -3 dB width is always the narrower of the two, which is exactly why a radio's "
+            + "3 dB figure cannot be substituted for this one");
     }
 }
