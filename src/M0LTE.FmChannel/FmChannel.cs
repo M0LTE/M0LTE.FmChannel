@@ -43,6 +43,18 @@ namespace M0LTE.Fm;
 /// discriminator tap.</param>
 /// <param name="DeviationErrorDb">Drive calibration error: positive over-deviates, negative under-
 /// deviates. 0 is a correctly calibrated transmitter.</param>
+/// <param name="LimitAtDeviationHz">Deviation at which the transmitter hard limits, or null for no
+/// limiter. <b>Null is the historic behaviour and it is an AGC, not a transmitter:</b> without a
+/// limiter every burst is scaled so its own peak lands on <c>PeakDeviationHz</c>, so over-driving
+/// is impossible and a high peak-to-average waveform is quietly attenuated where real hardware
+/// would clip it.
+/// <para>A real radio limits. A Tait TM8100 hard limits the pre-emphasised signal "to prevent
+/// overdeviation" (MMA-00005-05 p.58), at a programmable ceiling defaulting to 2500 Hz narrow,
+/// 4000 Hz mid and 5000 Hz wide (calibration manual p.15). Set this to that ceiling and the burst
+/// is driven at a fixed gain instead, exactly as a station is set up once and then left.</para>
+/// <para>The limiter's position and ceiling are documented; its knee, attack and release are not,
+/// anywhere in Tait's 1083 pages. It is modelled as an instantaneous hard clip, which is a
+/// modelling choice and not a Tait figure.</para></param>
 /// <param name="FlutterDopplerHz">Two-sigma Doppler of a flat Rayleigh fade on the RF carrier -
 /// VHF/UHF flutter. 0 for a static link.</param>
 public sealed record FmLinkProfile(
@@ -55,7 +67,8 @@ public sealed record FmLinkProfile(
     double PreEmphasisMicroseconds = 750,
     double DeEmphasisMicroseconds = 750,
     double DeviationErrorDb = 0,
-    double FlutterDopplerHz = 0)
+    double FlutterDopplerHz = 0,
+    double? LimitAtDeviationHz = null)
 {
     /// <summary>The path an ordinary handheld or mobile gives you: microphone in, speaker out,
     /// both emphasised and both band-limited to voice. What every FM packet station without a data
@@ -241,17 +254,43 @@ public sealed class FmChannel
     // modulator - so a mode whose energy sits where the path rolls off never gets on the air.
     private float[] ShapeTransmitAudio(float[] audio)
     {
-        float[] shaped = BandLimit(audio, _audioRate, _profile.TxAudioLowHz, _profile.TxAudioHighHz);
-        return _profile.PreEmphasisMicroseconds > 0
-            ? PreEmphasise(shaped, _audioRate, _profile.PreEmphasisMicroseconds)
-            : shaped;
+        // Tait's order, which is pre-emphasis, then the limiter, then the high-frequency filter
+        // (MMA-00005-05 p.58). With no limiter configured the two filters are linear and commute,
+        // so this is the same answer the old order gave; it only starts to matter once something
+        // non-linear sits between them, which is the entire point of putting the limiter here.
+        float[] shaped = _profile.PreEmphasisMicroseconds > 0
+            ? PreEmphasise(audio, _audioRate, _profile.PreEmphasisMicroseconds)
+            : audio;
+        return BandLimit(shaped, _audioRate, _profile.TxAudioLowHz, _profile.TxAudioHighHz);
     }
 
-    // Drive calibration, done the way the bench does it: find the burst's own peak and scale that
-    // to the target deviation. Measuring the peak over the burst only (not the silent padding)
-    // keeps a long key-up from flattering the drive.
+    // Drive calibration. Two modes, and the difference matters more than it looks.
+    //
+    // With no limiter configured, this finds the burst's own peak and scales it to the target
+    // deviation. That is an AGC rather than a transmitter: over-driving is impossible, and a
+    // waveform with a high peak-to-average ratio is quietly attenuated where real hardware would
+    // clip it. It is the historic behaviour and every pinned number was measured through it.
+    //
+    // With a limiter configured, the burst is driven at a FIXED gain - full scale audio maps to the
+    // profile's peak deviation, the way a station is set up once and then left - and anything that
+    // exceeds the limiter's ceiling is clipped, which is what a real radio does. A peaky waveform
+    // then pays in distortion instead of in level, and that is a different price with different
+    // consequences for a mode that has to be decoded afterwards.
     private float[] ScaleToDeviation(float[] shaped, int burstStart, int burstLength)
     {
+        if (_profile.LimitAtDeviationHz is double ceiling)
+        {
+            var limited = new float[shaped.Length];
+            double gain = AppliedDeviationHz;
+            for (int n = 0; n < shaped.Length; n++)
+            {
+                double hz = shaped[n] * gain;
+                limited[n] = (float)Math.Clamp(hz, -ceiling, ceiling);
+            }
+
+            return limited;
+        }
+
         double peak = 0;
         int end = Math.Min(shaped.Length, burstStart + burstLength);
         for (int n = burstStart; n < end; n++)

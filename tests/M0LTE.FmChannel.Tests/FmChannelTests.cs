@@ -402,4 +402,61 @@ public class FmChannelTests
             "the -3 dB width is always the narrower of the two, which is exactly why a radio's "
             + "3 dB figure cannot be substituted for this one");
     }
+
+    [Fact]
+    public void A_Limiter_Clips_Overdrive_Where_No_Limiter_Merely_Turns_It_Down()
+    {
+        // The difference between the two drive modes, stated as a test because it changes what a
+        // peaky waveform costs. A real radio hard limits after pre-emphasis "to prevent
+        // overdeviation" (Tait MMA-00005-05 p.58): drive it harder and the peaks are clipped. The
+        // no-limiter mode instead scales each burst so its own peak lands on the target, which is
+        // an AGC - drive it harder and nothing at all happens, which flatters any mode with a high
+        // peak-to-average ratio.
+        const int rate = 24000;
+        float[] quiet = Tone(rate, 1000, 0.4f, rate);
+        float[] loud = Tone(rate, 1000, 0.8f, rate);
+
+        // A station driven hot, with the limiter doing the job it is there for: full scale audio
+        // would ask for 5 kHz of deviation and the ceiling holds it to 2.5 kHz. Drive calibration
+        // and the protection ceiling are separate numbers, and on a well-set station the first sits
+        // below the second, which is why they have to be set independently here to see any clipping
+        // at all.
+        var limited = FmLinkProfile.DataPort(5000) with { LimitAtDeviationHz = 2500 };
+        double limitedRatio = Rms(new FmChannel(limited, rate, 1).Apply(loud, double.PositiveInfinity))
+            / Rms(new FmChannel(limited, rate, 1).Apply(quiet, double.PositiveInfinity));
+
+        var scaled = FmLinkProfile.DataPort(5000);
+        double scaledRatio = Rms(new FmChannel(scaled, rate, 1).Apply(loud, double.PositiveInfinity))
+            / Rms(new FmChannel(scaled, rate, 1).Apply(quiet, double.PositiveInfinity));
+
+        limitedRatio.Should().BeLessThan(
+            1.9, "a limiter must not pass a doubling of drive through untouched");
+        scaledRatio.Should().BeApproximately(
+            1.0, 0.15,
+            "without a limiter every burst is normalised to its own peak, so twice the drive is "
+            + "the same signal - which is an AGC, not a transmitter");
+    }
+
+    private static float[] Tone(int rate, double hz, float amplitude, int samples)
+    {
+        var audio = new float[samples];
+        for (int n = 0; n < samples; n++)
+        {
+            audio[n] = (float)(amplitude * Math.Sin(2 * Math.PI * hz * n / rate));
+        }
+
+        return audio;
+    }
+
+    private static double Rms(float[] audio)
+    {
+        double sum = 0;
+        int from = audio.Length / 4;
+        for (int n = from; n < audio.Length; n++)
+        {
+            sum += audio[n] * (double)audio[n];
+        }
+
+        return Math.Sqrt(sum / (audio.Length - from));
+    }
 }
