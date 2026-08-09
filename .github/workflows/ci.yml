@@ -1,29 +1,29 @@
 name: ci
 
+# GitHub-hosted, NOT the [self-hosted, Linux, X64] the packet-net repositories use. That house rule
+# exists because those repositories have no Actions minutes budget - but this one is public, where
+# GitHub-hosted minutes are free and unlimited, and the self-hosted runners are registered to the
+# packet-net org, so a job asking for them here would queue for ever.
+
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 jobs:
   build-test:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # The xUnit v3 / MTP test apphosts (OutputType=Exe) resolve the runtime via DOTNET_ROOT;
-      # the runner's distro dotnet lives outside the apphost's default search paths, so register
-      # it explicitly or every test invocation dies with "You must install .NET".
-      - name: Register .NET root for MTP apphosts
-        run: echo "DOTNET_ROOT=$(dirname "$(readlink -f "$(which dotnet)")")" >> "$GITHUB_ENV"
-
-      # Past the HTTP cache: these runners are self-hosted and keep their NuGet cache between
-      # jobs indefinitely, so a just-cut dependency would otherwise stay invisible for hours.
-      - name: Restore
-        run: dotnet restore --no-http-cache
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
 
       - name: Build
-        run: dotnet build -c Release --no-restore
+        run: dotnet build -c Release
 
       - name: Test
         run: dotnet test -c Release --no-build

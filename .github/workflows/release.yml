@@ -27,14 +27,17 @@ permissions:
 
 jobs:
   release:
-    runs-on: [self-hosted, Linux, X64]
+    # GitHub-hosted for the same reason as ci.yml: this repository is public, so the minutes are
+    # free, and the self-hosted runners belong to a different org.
+    runs-on: ubuntu-latest
     env:
       NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Register .NET root for MTP apphosts
-        run: echo "DOTNET_ROOT=$(dirname "$(readlink -f "$(which dotnet)")")" >> "$GITHUB_ENV"
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
 
       - name: Work out the version
         id: version
@@ -48,9 +51,7 @@ jobs:
           echo "building $version"
 
       - name: Test
-        run: |
-          dotnet restore --no-http-cache
-          dotnet test -c Release
+        run: dotnet test -c Release
 
       - name: Pack
         run: dotnet pack src/M0LTE.FmChannel/M0LTE.FmChannel.csproj -c Release
