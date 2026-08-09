@@ -1,8 +1,19 @@
 name: release
 
 # Cut a NuGet package for a `v*` tag. workflow_dispatch builds and leaves the package as a
-# workflow artifact without publishing anything - a dry run of the pipeline. Set `publish: true`
-# to also push it to nuget.org, which needs a NUGET_API_KEY secret on the repository or the org.
+# workflow artifact without publishing anything - a dry run of the whole pipeline. Set
+# `publish: true` to also push it to nuget.org.
+#
+# Publishing uses NuGet TRUSTED PUBLISHING rather than a long-lived API key: the job asks GitHub
+# for a short-lived OIDC token, nuget.org checks it against a policy naming this repository and
+# this workflow, and hands back a temporary key. Nothing secret is stored anywhere, so there is no
+# key to leak, rotate or accidentally print.
+#
+# What has to exist on nuget.org for the push step to work:
+#   - a Trusted Publishing policy on the M0LTE.FmChannel package (or a reserved prefix) for
+#     repository M0LTE/M0LTE.FmChannel, workflow release.yml, on the main branch
+#   - a repository variable NUGET_USER holding the nuget.org account that owns that policy
+# Until both are in place, run this with publish:false - the build and pack steps are unaffected.
 
 on:
   push:
@@ -23,15 +34,16 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+  # The whole point of trusted publishing: this is what lets the job prove to nuget.org which
+  # repository and workflow it is, without holding a credential.
+  id-token: write
 
 jobs:
   release:
     # GitHub-hosted for the same reason as ci.yml: this repository is public, so the minutes are
     # free, and the self-hosted runners belong to a different org.
     runs-on: ubuntu-latest
-    env:
-      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,12 +74,19 @@ jobs:
           name: nupkg
           path: artifacts/*
 
+      # Exchanges this job's OIDC token for a short-lived nuget.org key. Fails loudly if the
+      # trusted-publishing policy or the NUGET_USER variable is missing, which is the right
+      # behaviour - a silent skip would look like a successful release that published nothing.
+      - name: Get a short-lived NuGet key
+        if: github.event_name == 'push' || github.event.inputs.publish == 'true'
+        id: nuget
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
       - name: Push to NuGet
         if: github.event_name == 'push' || github.event.inputs.publish == 'true'
         run: |
-          [ -n "$NUGET_API_KEY" ] || {
-            echo "::error::NUGET_API_KEY is not set on this repository or org"
-            exit 1
-          }
-          dotnet nuget push "artifacts/*.nupkg" --api-key "$NUGET_API_KEY" \
+          dotnet nuget push "artifacts/*.nupkg" \
+            --api-key "${{ steps.nuget.outputs.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json --skip-duplicate
