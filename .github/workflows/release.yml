@@ -1,0 +1,72 @@
+name: release
+
+# Cut a NuGet package for a `v*` tag. workflow_dispatch builds and leaves the package as a
+# workflow artifact without publishing anything - a dry run of the pipeline. Set `publish: true`
+# to also push it to nuget.org, which needs a NUGET_API_KEY secret on the repository or the org.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the leading v (e.g. 0.1.0 or 0.1.0-rc1)'
+        required: true
+      publish:
+        description: 'Also push to NuGet'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: [self-hosted, Linux, X64]
+    env:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Register .NET root for MTP apphosts
+        run: echo "DOTNET_ROOT=$(dirname "$(readlink -f "$(which dotnet)")")" >> "$GITHUB_ENV"
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "building $version"
+
+      - name: Test
+        run: |
+          dotnet restore --no-http-cache
+          dotnet test -c Release
+
+      - name: Pack
+        run: dotnet pack src/M0LTE.FmChannel/M0LTE.FmChannel.csproj -c Release
+             -p:Version=${{ steps.version.outputs.version }} -o artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/*
+
+      - name: Push to NuGet
+        if: github.event_name == 'push' || github.event.inputs.publish == 'true'
+        run: |
+          [ -n "$NUGET_API_KEY" ] || {
+            echo "::error::NUGET_API_KEY is not set on this repository or org"
+            exit 1
+          }
+          dotnet nuget push "artifacts/*.nupkg" --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json --skip-duplicate

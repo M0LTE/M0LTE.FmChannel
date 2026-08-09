@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The xUnit v3 / MTP test apphosts (OutputType=Exe) resolve the runtime via DOTNET_ROOT;
+      # the runner's distro dotnet lives outside the apphost's default search paths, so register
+      # it explicitly or every test invocation dies with "You must install .NET".
+      - name: Register .NET root for MTP apphosts
+        run: echo "DOTNET_ROOT=$(dirname "$(readlink -f "$(which dotnet)")")" >> "$GITHUB_ENV"
+
+      # Past the HTTP cache: these runners are self-hosted and keep their NuGet cache between
+      # jobs indefinitely, so a just-cut dependency would otherwise stay invisible for hours.
+      - name: Restore
+        run: dotnet restore --no-http-cache
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build
