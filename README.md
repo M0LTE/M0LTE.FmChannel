@@ -74,23 +74,32 @@ figures modelled a filter narrower than the radio they came from, and took a 25 
 frames of 25 to none at all. That read as a finding about the radio and was arithmetic about
 definitions. A Tait's wide channel is an ordinary 25 kHz channel, not a tight one.
 
-## Two drive modes, and the difference matters
+## Two drive modes, and which one you want depends on where you inject
 
-By default every burst is scaled so its own peak lands on `PeakDeviationHz`. **That is an AGC, not a
-transmitter**: over-driving is impossible, and a waveform with a high peak-to-average ratio is
-quietly turned down where real hardware would clip it. It is the historic behaviour and it flatters
-peaky modes, OFDM among them.
+**Default, no limiter: every burst is scaled so its own peak lands on `PeakDeviationHz`.** That is
+the right model for a tap PAST the transmitter's limiter, where nothing protects the modulator and
+the operator therefore sets the drive once against the waveform's own peak. A Tait TM8100's T13 is
+such a point: it sits after compression, encryption, the 300 Hz high pass, pre-emphasis, the limiter,
+the 3 kHz low pass and the peak-system-deviation scaler, so an injected signal reaches the modulator
+having met none of them. There, a waveform with a higher peak-to-average ratio genuinely does cost
+you level across the whole burst, because you have to turn everything down to keep the peak legal.
 
-Set `LimitAtDeviationHz` and the burst is driven at a fixed gain instead, the way a station is set
-up once and left, with anything past the ceiling hard clipped. A real radio does this: a Tait TM8100
-hard limits the pre-emphasised signal "to prevent overdeviation" (MMA-00005-05 p.58) at a
-programmable ceiling defaulting to 2500 Hz narrow, 4000 Hz mid and 5000 Hz wide. Drive calibration
-and the protection ceiling are separate numbers, and on a well-set station the first sits below the
-second.
+**Set `LimitAtDeviationHz` and the burst is driven at a fixed gain with anything past the ceiling
+hard clipped.** That is the right model for the microphone path, or for a tap BEFORE the limiter
+such as T5. A Tait hard limits the pre-emphasised signal "to prevent overdeviation"
+(MMA-00005-05 p.58) at a programmable ceiling defaulting to 2500 Hz narrow, 4000 Hz mid and 5000 Hz
+wide. There a peaky waveform pays in distortion on the peaks rather than in level everywhere.
+
+**The two answer differently and the difference is large**, so choosing the wrong one will mislead
+you about your own waveform. Measured on an audio-band OFDM mode whose last symbol had an unusually
+high peak: fixing that peak was worth about 3 dB with no limiter, and nothing measurable at all with
+one. Under peak scaling the spike drags the entire burst down; under a limiter it is simply clipped,
+and one symbol of eight is distorted while the rest are untouched. Same waveform, same fix, two
+honest answers to two different questions.
 
 The limiter's position and ceiling are documented; its knee, attack and release are not, anywhere in
-Tait's 1083 pages, so it is modelled as an instantaneous hard clip. That is a modelling choice and
-is labelled as one rather than dressed up as a datasheet figure.
+Tait's 1083 pages, so it is modelled as an instantaneous hard clip. That is a modelling choice and is
+labelled as one.
 
 ## Filters are specified in hertz
 

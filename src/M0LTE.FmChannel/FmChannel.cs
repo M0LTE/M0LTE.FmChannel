@@ -44,10 +44,14 @@ namespace M0LTE.Fm;
 /// <param name="DeviationErrorDb">Drive calibration error: positive over-deviates, negative under-
 /// deviates. 0 is a correctly calibrated transmitter.</param>
 /// <param name="LimitAtDeviationHz">Deviation at which the transmitter hard limits, or null for no
-/// limiter. <b>Null is the historic behaviour and it is an AGC, not a transmitter:</b> without a
-/// limiter every burst is scaled so its own peak lands on <c>PeakDeviationHz</c>, so over-driving
-/// is impossible and a high peak-to-average waveform is quietly attenuated where real hardware
-/// would clip it.
+/// limiter. <b>Which of the two you want depends on where the modem injects, and they answer
+/// differently enough to mislead you about your own waveform.</b>
+/// <para>Null scales every burst so its own peak lands on <c>PeakDeviationHz</c>. That is the right
+/// model for a tap PAST the limiter, where nothing protects the modulator and the operator sets the
+/// drive once against the waveform's own peak: a Tait TM8100's T13 sits after compression,
+/// encryption, the 300 Hz high pass, pre-emphasis, the limiter, the 3 kHz low pass and the
+/// peak-system-deviation scaler, so an injected signal meets none of them. A peakier waveform then
+/// genuinely costs level across the whole burst.</para>
 /// <para>A real radio limits. A Tait TM8100 hard limits the pre-emphasised signal "to prevent
 /// overdeviation" (MMA-00005-05 p.58), at a programmable ceiling defaulting to 2500 Hz narrow,
 /// 4000 Hz mid and 5000 Hz wide (calibration manual p.15). Set this to that ceiling and the burst
