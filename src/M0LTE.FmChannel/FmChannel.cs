@@ -81,9 +81,14 @@ public sealed record FmLinkProfile(
     /// answer should say which radio it means.</b> A Tait TM8100 measures its own at 12.6 kHz wide,
     /// 12.0 kHz medium and 7.8 kHz narrow, for all bands except K5 which is 12.0, 9.0 and 7.6
     /// (service manual MMA-00005-05 issue 5, p.73, Table 3.1). That is 3.4 kHz narrower than the
-    /// generic figure on a 25 kHz channel, and it is not a rounding difference: a mode occupying
-    /// about 20 kHz, such as C4FSK 19200, goes from decoding 25 of 25 bursts to decoding NONE
-    /// through it. That is a real property of that radio and not a defect in the mode.</para>
+    /// generic figure on a 25 kHz channel.</para>
+    /// <para><b>Do not conclude from that that a fast mode cannot fit.</b> It was briefly claimed
+    /// here that a 20 kHz mode could not pass 12.6 kHz, on the strength of this library measuring
+    /// C4FSK 19200 at zero frames through it. Tait's own product says otherwise: their high speed
+    /// data runs at "12 kbit/s ... narrow band and wide band, and can be set to 19200 bit/s for
+    /// THSD wide band" (MMA-00038-06 p.9), so 19200 over the air fits 12.6 kHz and 12 kbit/s fits
+    /// 7.8 kHz, in Tait's own radio. A simulated mode that dies there is evidence about the
+    /// simulation, not about the radio.</para>
     /// <para>0.4.0 briefly made this function return Tait's figures, which was wrong: one
     /// manufacturer's measurements do not belong in a generic helper. They belong to a radio model,
     /// and until there is one, pass the figure you mean.</para>

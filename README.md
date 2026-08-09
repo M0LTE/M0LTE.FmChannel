@@ -64,10 +64,17 @@ mode, not a preference.
 
 **Real radios vary by more than enough to matter.** A Tait TM8100 measures its own IF at 12.6 kHz
 wide, 12.0 kHz medium and 7.8 kHz narrow (service manual MMA-00005-05 p.73, Table 3.1), which on a
-25 kHz channel is 3.4 kHz narrower than the generic figure. That is not a rounding difference: a
-mode occupying about 20 kHz, such as C4FSK 19200, decodes 25 of 25 bursts through 16 kHz and **none
-at all** through 12.6 kHz. If the answer matters to you, pass the figure for the radio you mean
-rather than the one for its channel spacing.
+25 kHz channel is 3.4 kHz narrower than the generic figure. If the answer matters to you, pass the
+figure for the radio you mean rather than the one for its channel spacing.
+
+**A caution, learnt the hard way.** It is tempting to compare a mode's occupied bandwidth against an
+IF bandwidth and conclude the mode cannot fit. That reasoning was used here, from this library
+measuring C4FSK 19200 at zero frames through 12.6 kHz, and it was wrong. Tait's own high speed data
+runs at "12 kbit/s ... narrow band and wide band, and can be set to 19200 bit/s for THSD wide band"
+(MMA-00038-06 p.9): 19200 over the air through 12.6 kHz, and 12 kbit/s through 7.8 kHz, in that same
+radio. **A simulated mode that dies in a narrower IF is evidence about the simulation.** Occupied
+bandwidth at 99% of power is not the bandwidth a mode needs, and this model's IF filter has sharper
+skirts than a crystal-plus-FPGA cascade.
 
 ## Filters are specified in hertz
 
