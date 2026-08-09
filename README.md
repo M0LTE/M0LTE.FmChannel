@@ -74,6 +74,42 @@ figures modelled a filter narrower than the radio they came from, and took a 25 
 frames of 25 to none at all. That read as a finding about the radio and was arithmetic about
 definitions. A Tait's wide channel is an ordinary 25 kHz channel, not a tight one.
 
+## From a station description to a carrier-to-noise ratio
+
+`Apply` asks for a carrier-to-noise ratio, which nobody knows about their own link. They know their
+power, their feeder, their antennas, roughly what the path costs, and they can read an RSSI.
+
+```csharp
+var node = new Station(Station.Watts(25), FeederLossDb: 2, AntennaGainDbi: 6,
+    ReceiverNoiseFigureDb: TaitTm8100.NoiseFigureDb(TaitBandwidth.Narrow));
+
+double received = LinkBudget.ReceivedDbm(node, user, pathLossDb: 120);
+double cnr = LinkBudget.CarrierToNoiseDb(received, ifBandwidth, node.ReceiverNoiseFigureDb,
+    SiteNoise.Residential, frequencyMHz: 145);
+```
+
+**Where a station is sited is worth more on 2 m than most receiver work.** Man-made noise
+(ITU-R P.372) puts the floor about 12 dB higher at a business site than a quiet rural one at
+145 MHz, and almost nothing apart at 433 MHz where it has fallen below the receiver's own noise.
+`SiteNoise` carries that, and a test pins both halves.
+
+**Path loss is deliberately not modelled beyond free space.** A terrain model that looked
+authoritative would be worse than asking; supply a measured loss, or an RSSI reading, or a
+free-space figure you have chosen to accept.
+
+## A radio, for the one configuration the documentation can support
+
+`TaitTm8100.Link(TaitBandwidth.Narrow)` gives a TM8100 tapped at R1 and T13, which is the
+configuration where **every stage whose behaviour Tait do not publish is bypassed**: no
+pre-emphasis, no de-emphasis, no limiter, no voice-band filtering. So it is built entirely from
+figures that carry a page number, and it refuses a deviation above its own class ceiling rather than
+silently simulating an illegal station.
+
+A microphone-path model is deliberately NOT offered. It would need the emphasis time constant, which
+appears nowhere in Tait's 1083 pages, and the limiter's knee, attack and release, which appear
+nowhere either. Build it yourself from `MicAndSpeaker` if you want it, and know which of its numbers
+you chose.
+
 ## Two drive modes, and which one you want depends on where you inject
 
 **Default, no limiter: every burst is scaled so its own peak lands on `PeakDeviationHz`.** That is
