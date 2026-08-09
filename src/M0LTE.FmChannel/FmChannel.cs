@@ -50,14 +50,14 @@ public sealed record FmLinkProfile(
     /// <summary>The path an ordinary handheld or mobile gives you: microphone in, speaker out,
     /// both emphasised and both band-limited to voice. What every FM packet station without a data
     /// port is using.</summary>
-    public static FmLinkProfile MicAndSpeaker(double peakDeviationHz, double ifBandwidthHz = 8000) =>
+    public static FmLinkProfile MicAndSpeaker(double peakDeviationHz, double ifBandwidthHz = 7800) =>
         new(peakDeviationHz, ifBandwidthHz);
 
     /// <summary>A radio's data port: flat audio into the modulator, discriminator audio out, no
     /// emphasis either end and a much wider passband. What a 9600 baud packet radio needs, and
     /// what a wideband audio-band mode assumes.</summary>
     public static FmLinkProfile DataPort(
-        double peakDeviationHz, double? audioHighHz = null, double ifBandwidthHz = 8000)
+        double peakDeviationHz, double? audioHighHz = null, double ifBandwidthHz = 7800)
     {
         // A discriminator cannot hand back more audio bandwidth than half its IF filter, so the
         // data port's passband follows the channel rather than a constant: about 4 kHz on a
@@ -73,8 +73,22 @@ public sealed record FmLinkProfile(
     /// <summary>Receiver IF bandwidth for a channel spacing: about 8 kHz on the 12.5 kHz narrow
     /// channels, about 16 kHz on the 25 kHz wide ones. Which spacing a mode belongs on is a
     /// property of the mode, not a preference - see <c>FmModes</c>.</summary>
-    public static double IfBandwidthForSpacing(double channelSpacingHz) =>
-        channelSpacingHz >= 20000 ? 16000 : 8000;
+    /// <remarks>
+    /// These are a real radio's measured figures rather than a rule of thumb: the Tait TM8100 and
+    /// TM8200 service manual (MMA-00005-05, issue 5, p.73, Table 3.1 "Total IF 3 dB bandwidths")
+    /// gives 12.6 kHz wide, 12.0 kHz medium and 7.8 kHz narrow for all bands except K5, which is
+    /// 12.0, 9.0 and 7.6 kHz. The K5 column is not modelled here; say so if you need it.
+    /// <para>This function used to return 16 kHz for anything at or above 20 kHz spacing and 8 kHz
+    /// below, which is a full 27 % too wide on a 25 kHz channel and 33 % too wide on a 20 kHz one.
+    /// A carrier-to-noise ratio is stated in this bandwidth, so getting it wrong moves every number
+    /// measured on a wide channel by about 1.1 dB, in the direction that flatters the modem.</para>
+    /// </remarks>
+    public static double IfBandwidthForSpacing(double channelSpacingHz) => channelSpacingHz switch
+    {
+        >= 22500 => 12600,
+        >= 15000 => 12000,
+        _ => 7800,
+    };
 }
 
 /// <summary>
