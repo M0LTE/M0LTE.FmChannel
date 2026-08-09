@@ -61,21 +61,18 @@ end, the emphasis time constants, a deviation calibration error, and flat-Raylei
 `FmLinkProfile.IfBandwidthForSpacing()` gives the usual IF bandwidth for a channel spacing. Which
 spacing a mode belongs on is a property of the mode, not a preference.
 
-## A known defect, stated plainly
+## Filters are specified in hertz
 
-**The filters use fixed tap counts.** A windowed-sinc's transition width is roughly `rate/taps`, so
-a fixed count makes every filter twice as sloppy each time the sample rate doubles - which is not
-how a radio behaves, since its audio filters are analogue and do not widen because a sound card
-samples faster. The practical effect is that the same waveform measured at two sample rates sees
-two different channels, and the higher rate is penalised.
+A windowed-sinc's transition width is roughly `rate/taps`, so a fixed tap count makes a filter
+twice as sloppy each time the sample rate doubles - which is not how a radio behaves, its audio
+filters being analogue and no wider for a sound card sampling faster. Every filter here is
+therefore specified by its shape and the tap count derived: the transition is a fixed fraction of
+the passband, at whatever rate the stage runs at.
 
-Measured on one audio-band OFDM waveform, frames of 8 across +28 to +12 dB CNR: as written, 24 kHz
-gave 8/8/8/8/2 and 96 kHz gave 8/8/8/6/0; with the tap count scaled so every rate saw the same
-filter in Hz, both gave 8/8/8/8/1-2. The entire difference was the model.
-
-It is not fixed here yet because fixing it moves every number measured through it, and the modems
-that depend on those numbers pin them as regression floors. The fix and the re-measurement are one
-job, in that order.
+That matters because it is what makes a measurement at one rate comparable with one at another. It
+was not always so: up to 0.2.0 the tap counts were fixed, and the same waveform measured at two
+rates went through two different channels with the higher rate penalised. **Nothing measured
+through 0.2.0 or earlier is comparable with anything measured through 0.3.0 or later.**
 
 ## Licence
 
