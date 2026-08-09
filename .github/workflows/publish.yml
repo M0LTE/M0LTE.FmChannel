@@ -1,4 +1,4 @@
-name: release
+name: publish
 
 # Cut a NuGet package for a `v*` tag. workflow_dispatch builds and leaves the package as a
 # workflow artifact without publishing anything - a dry run of the whole pipeline. Set
@@ -11,9 +11,12 @@ name: release
 #
 # What has to exist on nuget.org for the push step to work:
 #   - a Trusted Publishing policy on the M0LTE.FmChannel package (or a reserved prefix) for
-#     repository M0LTE/M0LTE.FmChannel, workflow release.yml, on the main branch
+#     repository M0LTE/M0LTE.FmChannel, workflow publish.yml
 #   - a repository variable NUGET_USER holding the nuget.org account that owns that policy
-# Until both are in place, run this with publish:false - the build and pack steps are unaffected.
+#
+# The file name matters: a trusted-publishing policy names one workflow file, so renaming this
+# breaks publishing until the policy is updated to match. It is publish.yml because that is what
+# the policy was set up against.
 
 on:
   push:
@@ -30,7 +33,7 @@ on:
         default: false
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: publish-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -40,7 +43,7 @@ permissions:
   id-token: write
 
 jobs:
-  release:
+  publish:
     # GitHub-hosted for the same reason as ci.yml: this repository is public, so the minutes are
     # free, and the self-hosted runners belong to a different org.
     runs-on: ubuntu-latest
