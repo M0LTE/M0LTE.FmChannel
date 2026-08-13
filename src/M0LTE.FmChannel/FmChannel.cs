@@ -61,6 +61,18 @@ namespace M0LTE.Fm;
 /// modelling choice and not a Tait figure.</para></param>
 /// <param name="FlutterDopplerHz">Two-sigma Doppler of a flat Rayleigh fade on the RF carrier -
 /// VHF/UHF flutter. 0 for a static link.</param>
+/// <param name="ReceiverClockOffsetPpm">How fast the receiver's sample clock runs relative to the
+/// transmitter's, in parts per million; 0 for a shared clock.
+/// <para>The one impairment of a soundcard link that is not the radio's. The two ends keep time
+/// with two crystals, consumer USB audio is routinely tens of ppm off nominal, and two cards
+/// 100 ppm apart is an ordinary thing to own. For a burst mode the consequence is not a frequency
+/// error - FM has no carrier to offset at the audio - but a slow slide of the receiver's sample
+/// grid through the burst, which a coherent mode meets as a phase tilt growing across its band.
+/// A model without this measures a link two real soundcards will never give you.</para>
+/// <para>Positive means the receiver's clock runs fast, so the same audio lands across more of
+/// its samples; the sign is symmetric for anything that only cares about the difference. Applied
+/// at the very end of the receive chain, which is where the receiving soundcard sits.</para>
+/// </param>
 public sealed record FmLinkProfile(
     double PeakDeviationHz,
     double IfBandwidthHz = 8000,
@@ -72,7 +84,8 @@ public sealed record FmLinkProfile(
     double DeEmphasisMicroseconds = 750,
     double DeviationErrorDb = 0,
     double FlutterDopplerHz = 0,
-    double? LimitAtDeviationHz = null)
+    double? LimitAtDeviationHz = null,
+    double ReceiverClockOffsetPpm = 0)
 {
     /// <summary>The path an ordinary handheld or mobile gives you: microphone in, speaker out,
     /// both emphasised and both band-limited to voice. What every FM packet station without a data
@@ -413,7 +426,8 @@ public sealed class FmChannel
     }
 
     // The receive audio path: de-emphasis, the speaker or discriminator-tap filter, and back down
-    // to the modem's rate.
+    // to the modem's rate - then the receiving soundcard's own clock, last, because that is where
+    // the soundcard sits.
     private float[] ShapeReceiveAudio(float[] discriminated)
     {
         // Decimate first, then de-emphasise at the modem's own rate: the transmitter inverted the
@@ -423,7 +437,54 @@ public sealed class FmChannel
         float[] shaped = _profile.DeEmphasisMicroseconds > 0
             ? DeEmphasise(atAudioRate, _audioRate, _profile.DeEmphasisMicroseconds)
             : atAudioRate;
-        return BandLimit(shaped, _audioRate, _profile.RxAudioLowHz, _profile.RxAudioHighHz);
+        float[] limited = BandLimit(shaped, _audioRate, _profile.RxAudioLowHz, _profile.RxAudioHighHz);
+        return ResampleByClockOffset(limited, _profile.ReceiverClockOffsetPpm);
+    }
+
+    // The receiver's sample clock against the transmitter's: a windowed-sinc fractional resample
+    // by the offset. Thirty-three taps is transparent to far below anything a measurement through
+    // this model can see - the audio here occupies a small fraction of its own sample rate - so
+    // what it changes is only the timebase, which is the point. A few edge samples fall off each
+    // end and land in the lead-in and lead-out carrier padding.
+    private static float[] ResampleByClockOffset(float[] audio, double ppm)
+    {
+        if (ppm == 0)
+        {
+            return audio;
+        }
+
+        // Positive: the receiver's clock runs fast, its sample interval is short, and the same
+        // audio lands across more of its samples - so the step through the source is under one.
+        double step = 1.0 / (1.0 + (ppm * 1e-6));
+        const int HalfTaps = 16;
+        var output = new float[Math.Max((int)(audio.Length / step) - (2 * HalfTaps), 0)];
+        for (int n = 0; n < output.Length; n++)
+        {
+            double position = (n * step) + HalfTaps;
+            int centre = (int)Math.Floor(position);
+            double fraction = position - centre;
+            double sum = 0;
+            double weight = 0;
+            for (int t = -HalfTaps; t <= HalfTaps; t++)
+            {
+                int index = centre + t;
+                if (index < 0 || index >= audio.Length)
+                {
+                    continue;
+                }
+
+                double x = t - fraction;
+                double sinc = x == 0 ? 1.0 : Math.Sin(Math.PI * x) / (Math.PI * x);
+                double window = 0.5 * (1 + Math.Cos(Math.PI * x / (HalfTaps + 1)));
+                double tap = sinc * window;
+                sum += audio[index] * tap;
+                weight += tap;
+            }
+
+            output[n] = (float)(weight > 0 ? sum / weight : 0);
+        }
+
+        return output;
     }
 
     private static float[] BandLimit(float[] audio, int rate, double lowHz, double highHz)

@@ -437,6 +437,86 @@ public class FmChannelTests
             + "the same signal - which is an AGC, not a transmitter");
     }
 
+    [Fact]
+    public void A_Receiver_Clock_Offset_Slips_The_Timebase_And_Harms_Nothing_Else()
+    {
+        // A tone through a noiseless link, once with a shared clock and once with the receiver's
+        // running 100 ppm fast. The offset is not a frequency error in the FM sense - there is no
+        // carrier at the audio to move - it is the receiver's sample grid sliding through the
+        // burst, so the recovered tone's phase against a nominal reference slips linearly with
+        // time: 2 pi * f * t * offset, which for 1 kHz over one second at 100 ppm is 0.628 rad.
+        float[] tone = Tone(1000, 2.0);
+        var shared = FmLinkProfile.DataPort(2500);
+        var offset = shared with { ReceiverClockOffsetPpm = 100 };
+
+        float[] same = new FmChannel(shared, AudioRate, 0).Apply(tone, double.PositiveInfinity);
+        float[] slid = new FmChannel(offset, AudioRate, 0).Apply(tone, double.PositiveInfinity);
+
+        double slipShared = Math.Abs(PhaseSlip(same, 1000, secondsApart: 1.0));
+        double slipOffset = Math.Abs(PhaseSlip(slid, 1000, secondsApart: 1.0));
+        slipShared.Should().BeLessThan(0.1, "a shared clock has nothing to slip");
+        slipOffset.Should().BeApproximately(
+            2 * Math.PI * 1000 * 1.0 * 100e-6, 0.15,
+            "100 ppm at 1 kHz slips 0.628 rad per second, and the model should produce exactly "
+            + "the impairment two real soundcards do");
+
+        // The tone must come through essentially untouched otherwise: the resampler is part of
+        // the model now and must never become an impairment of its own. Two instrument traps met
+        // here, both worth keeping visible. The comparison is against the shared-clock arm rather
+        // than an absolute figure, because a noiseless full-deviation link already has a
+        // distortion floor of its own (see the IF truncation test above) and holding the offset
+        // arm to a number the link cannot reach reads as resampler damage. And it is measured at
+        // the frequency the offset actually delivers, not the nominal one - a long coherent
+        // window against 1000 Hz reads a 999.9 Hz tone as noise, which is the instrument falling
+        // into the very trap this knob exists to model. The two mistakes cost 6 dB and 19 dB of
+        // imaginary damage respectively before they were caught.
+        int start = (int)(0.4 * AudioRate);
+        int end = (int)(1.9 * AudioRate);
+        double sharedSnr = OutputSnrDb(same, 1000, start, end);
+        double slidSnr = OutputSnrDb(slid, 1000 / 1.0001, start, end);
+        slidSnr.Should().BeGreaterThan(sharedSnr - 3,
+            "resampling by 100 ppm must cost nothing against the link's own floor");
+
+        // And the direction: a fast receiver clock spreads the same audio across MORE samples.
+        // At 1000 ppm the stretch clears the resampler's fixed 32-sample edge trim unambiguously.
+        var fast = shared with { ReceiverClockOffsetPpm = 1000 };
+        float[] stretched = new FmChannel(fast, AudioRate, 0).Apply(tone, double.PositiveInfinity);
+        double expectedExtra = same.Length * 1000e-6;
+        (stretched.Length + 32 - same.Length).Should().BeInRange(
+            (int)(expectedExtra - 2), (int)(expectedExtra + 2),
+            "positive ppm is defined as the receiver sampling fast, which lengthens the capture");
+    }
+
+    /// <summary>The recovered tone's phase change against a nominal reference between two windows
+    /// a stated time apart - the signature of a sample-clock offset, which shifts nothing in
+    /// frequency but slides everything in time.</summary>
+    private static double PhaseSlip(float[] audio, double hz, double secondsApart)
+    {
+        double Phase(double centreSeconds)
+        {
+            int from = (int)((centreSeconds - 0.25) * AudioRate);
+            int to = (int)((centreSeconds + 0.25) * AudioRate);
+            double re = 0;
+            double im = 0;
+            for (int n = from; n < to && n < audio.Length; n++)
+            {
+                double theta = 2 * Math.PI * hz * n / AudioRate;
+                re += audio[n] * Math.Cos(theta);
+                im += audio[n] * Math.Sin(theta);
+            }
+
+            return Math.Atan2(im, re);
+        }
+
+        double slip = Phase(0.65 + secondsApart) - Phase(0.65);
+        return slip switch
+        {
+            > Math.PI => slip - (2 * Math.PI),
+            < -Math.PI => slip + (2 * Math.PI),
+            _ => slip,
+        };
+    }
+
     private static float[] Tone(int rate, double hz, float amplitude, int samples)
     {
         var audio = new float[samples];
